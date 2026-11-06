@@ -1,0 +1,644 @@
+<!DOCTYPE html>
+<html lang="en" class="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>FPGA LUT Generator (.mem File for Vivado)</title>
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        tailwind.config = {
+            darkMode: 'class',
+            theme: {
+                extend: {
+                    colors: {
+                        brand: {
+                            50: '#f0f9ff',
+                            100: '#e0f2fe',
+                            400: '#38bdf8',
+                            500: '#0ea5e9',
+                            600: '#0284c7',
+                            900: '#0c4a6e',
+                            accent: '#22c55e',
+                            cyan: '#06b6d4'
+                        },
+                        fpga: {
+                            bg: '#0b0f19',
+                            card: '#111827',
+                            border: '#1f2937',
+                            input: '#1d283a',
+                            terminal: '#050811'
+                        }
+                    },
+                    fontFamily: {
+                        mono: ['JetBrains Mono', 'Fira Code', 'Monaco', 'monospace']
+                    }
+                }
+            }
+        }
+    </script>
+    <!-- Chart.js for Waveform Preview -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <!-- FontAwesome Icons -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <style>
+        ::-webkit-scrollbar {
+            width: 8px;
+            height: 8px;
+        }
+        ::-webkit-scrollbar-track {
+            background: #050811;
+        }
+        ::-webkit-scrollbar-thumb {
+            background: #1f2937;
+            border-radius: 4px;
+        }
+        ::-webkit-scrollbar-thumb:hover {
+            background: #374151;
+        }
+    </style>
+</head>
+<body class="bg-fpga-bg text-slate-200 min-h-screen flex flex-col font-sans antialiased selection:bg-brand-500 selection:text-white">
+
+    <!-- Header -->
+    <header class="border-b border-fpga-border bg-fpga-card/80 backdrop-blur sticky top-0 z-50">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
+            <div class="flex items-center space-x-3">
+                <div class="p-2 bg-brand-500/10 border border-brand-500/30 rounded-lg text-brand-400">
+                    <i class="fa-solid fa-microchip text-xl"></i>
+                </div>
+                <div>
+                    <h1 class="text-lg font-bold tracking-tight text-white flex items-center gap-2">
+                        FPGA Sine ROM Generator
+                        <span class="text-xs font-mono font-normal bg-brand-500/20 text-brand-400 border border-brand-500/30 px-2 py-0.5 rounded">Vivado $readmemh</span>
+                    </h1>
+                    <p class="text-xs text-slate-400">Generate, visualize, and export LUT memory files for Verilog / SystemVerilog</p>
+                </div>
+            </div>
+            <div class="flex items-center gap-3">
+                <span class="text-xs text-emerald-400 bg-emerald-950/60 border border-emerald-800 px-3 py-1 rounded-full flex items-center gap-1.5 font-mono">
+                    <span class="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span> Verilog Standard Compatible
+                </span>
+            </div>
+        </div>
+    </header>
+
+    <!-- Main Content -->
+    <main class="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-6 grid grid-cols-1 lg:grid-cols-12 gap-6">
+
+        <!-- Controls Sidebar (Left Column) -->
+        <aside class="lg:col-span-4 space-y-6">
+            
+            <!-- Configuration Card -->
+            <div class="bg-fpga-card border border-fpga-border rounded-xl p-5 shadow-xl space-y-5">
+                <div class="flex items-center justify-between border-b border-fpga-border pb-3">
+                    <h2 class="font-semibold text-white flex items-center gap-2 text-sm">
+                        <i class="fa-sliders text-brand-400"></i> LUT Parameters
+                    </h2>
+                    <button id="reset-btn" class="text-xs text-slate-400 hover:text-brand-400 transition flex items-center gap-1">
+                        <i class="fa-rotate-left"></i> Reset Defaults
+                    </button>
+                </div>
+
+                <!-- Waveform Type -->
+                <div>
+                    <label class="block text-xs font-medium text-slate-300 mb-1.5">Waveform Type</label>
+                    <div class="grid grid-cols-2 gap-2">
+                        <button type="button" data-wave="sine" class="wave-btn active px-3 py-2 text-xs font-medium rounded-lg border bg-brand-600 border-brand-500 text-white flex items-center justify-center gap-2 transition">
+                            <i class="fa-solid fa-wave-square"></i> Sine
+                        </button>
+                        <button type="button" data-wave="cosine" class="wave-btn px-3 py-2 text-xs font-medium rounded-lg border border-fpga-border bg-fpga-input text-slate-300 hover:bg-slate-800 flex items-center justify-center gap-2 transition">
+                            Cosine
+                        </button>
+                        <button type="button" data-wave="triangle" class="wave-btn px-3 py-2 text-xs font-medium rounded-lg border border-fpga-border bg-fpga-input text-slate-300 hover:bg-slate-800 flex items-center justify-center gap-2 transition">
+                            Triangle
+                        </button>
+                        <button type="button" data-wave="sawtooth" class="wave-btn px-3 py-2 text-xs font-medium rounded-lg border border-fpga-border bg-fpga-input text-slate-300 hover:bg-slate-800 flex items-center justify-center gap-2 transition">
+                            Sawtooth
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Encoding Mode -->
+                <div>
+                    <label class="block text-xs font-medium text-slate-300 mb-1.5">Encoding Mode</label>
+                    <select id="mode-select" class="w-full bg-fpga-input border border-fpga-border rounded-lg px-3 py-2 text-xs text-slate-100 focus:outline-none focus:border-brand-500 transition">
+                        <option value="offset">Offset Binary / Unsigned (0x8000 Midpoint)</option>
+                        <option value="signed">2's Complement Signed (0x0000 Midpoint)</option>
+                    </select>
+                    <p id="mode-desc" class="text-[11px] text-slate-400 mt-1">Midpoint mapped to 0x8000. Full positive scale from 0x0000 to 0xFFFF.</p>
+                </div>
+
+                <!-- Sample Count Presets -->
+                <div>
+                    <label class="block text-xs font-medium text-slate-300 mb-1.5">Sample Count (SIZE / Depth)</label>
+                    <div class="grid grid-cols-5 gap-1.5 mb-2">
+                        <button type="button" data-size="256" class="size-preset-btn px-2 py-1 text-xs font-mono rounded border border-fpga-border bg-fpga-input hover:bg-slate-800 text-slate-300">256</button>
+                        <button type="button" data-size="512" class="size-preset-btn px-2 py-1 text-xs font-mono rounded border border-fpga-border bg-fpga-input hover:bg-slate-800 text-slate-300">512</button>
+                        <button type="button" data-size="1024" class="size-preset-btn active px-2 py-1 text-xs font-mono rounded border bg-brand-600 border-brand-500 text-white">1024</button>
+                        <button type="button" data-size="2048" class="size-preset-btn px-2 py-1 text-xs font-mono rounded border border-fpga-border bg-fpga-input hover:bg-slate-800 text-slate-300">2048</button>
+                        <button type="button" data-size="4096" class="size-preset-btn px-2 py-1 text-xs font-mono rounded border border-fpga-border bg-fpga-input hover:bg-slate-800 text-slate-300">4096</button>
+                    </div>
+                    <div class="flex items-center gap-2">
+                        <span class="text-xs text-slate-400">Custom Size:</span>
+                        <input type="number" id="custom-size-input" value="1024" min="4" max="65536" class="flex-1 bg-fpga-input border border-fpga-border rounded px-2.5 py-1 text-xs text-slate-100 font-mono focus:outline-none focus:border-brand-500">
+                    </div>
+                </div>
+
+                <!-- Bit Width -->
+                <div>
+                    <label class="block text-xs font-medium text-slate-300 mb-1.5">Bit Width (Resolution)</label>
+                    <div class="grid grid-cols-5 gap-1.5">
+                        <button type="button" data-bits="8" class="bits-btn px-2 py-1 text-xs font-mono rounded border border-fpga-border bg-fpga-input hover:bg-slate-800 text-slate-300">8-bit</button>
+                        <button type="button" data-bits="12" class="bits-btn px-2 py-1 text-xs font-mono rounded border border-fpga-border bg-fpga-input hover:bg-slate-800 text-slate-300">12-bit</button>
+                        <button type="button" data-bits="16" class="bits-btn active px-2 py-1 text-xs font-mono rounded border bg-brand-600 border-brand-500 text-white">16-bit</button>
+                        <button type="button" data-bits="24" class="bits-btn px-2 py-1 text-xs font-mono rounded border border-fpga-border bg-fpga-input hover:bg-slate-800 text-slate-300">24-bit</button>
+                        <button type="button" data-bits="32" class="bits-btn px-2 py-1 text-xs font-mono rounded border border-fpga-border bg-fpga-input hover:bg-slate-800 text-slate-300">32-bit</button>
+                    </div>
+                </div>
+
+                <!-- Amplitude & Phase Sliders -->
+                <div class="space-y-3 pt-2 border-t border-fpga-border">
+                    <div class="flex justify-between items-center">
+                        <label class="text-xs font-medium text-slate-300">Amplitude Scale</label>
+                        <span id="scale-val" class="text-xs font-mono text-brand-400">100%</span>
+                    </div>
+                    <input type="range" id="scale-slider" min="10" max="100" value="100" class="w-full accent-brand-500 bg-fpga-input rounded-lg h-1.5 cursor-pointer">
+
+                    <div class="flex justify-between items-center">
+                        <label class="text-xs font-medium text-slate-300">Phase Shift (Degrees)</label>
+                        <span id="phase-val" class="text-xs font-mono text-brand-400">0°</span>
+                    </div>
+                    <input type="range" id="phase-slider" min="0" max="360" value="0" step="5" class="w-full accent-brand-500 bg-fpga-input rounded-lg h-1.5 cursor-pointer">
+                </div>
+            </div>
+
+            <!-- Diagnostics Card -->
+            <div class="bg-fpga-card border border-fpga-border rounded-xl p-5 shadow-xl space-y-4">
+                <h3 class="text-xs font-semibold uppercase tracking-wider text-slate-400 flex items-center gap-2">
+                    <i class="fa-solid fa-microchip text-brand-cyan"></i> ROM Specifications
+                </h3>
+                
+                <div class="grid grid-cols-2 gap-3 text-xs">
+                    <div class="bg-fpga-input/60 border border-fpga-border/60 rounded-lg p-2.5">
+                        <span class="text-slate-400 block mb-1">Hex Digits / Line</span>
+                        <span id="stat-hex-digits" class="font-mono text-white font-semibold text-xs">4 Digits</span>
+                    </div>
+                    <div class="bg-fpga-input/60 border border-fpga-border/60 rounded-lg p-2.5">
+                        <span class="text-slate-400 block mb-1">Total ROM Size</span>
+                        <span id="stat-rom-size" class="font-mono text-brand-accent font-semibold text-xs">2.00 KB</span>
+                    </div>
+                    <div class="bg-fpga-input/60 border border-fpga-border/60 rounded-lg p-2.5">
+                        <span class="text-slate-400 block mb-1">Max Hex Value</span>
+                        <span id="stat-max-val" class="font-mono text-white truncate text-[11px]">0xFFFF</span>
+                    </div>
+                    <div class="bg-fpga-input/60 border border-fpga-border/60 rounded-lg p-2.5">
+                        <span class="text-slate-400 block mb-1">Min Hex Value</span>
+                        <span id="stat-min-val" class="font-mono text-white truncate text-[11px]">0x0000</span>
+                    </div>
+                </div>
+            </div>
+        </aside>
+
+        <!-- Main Display (Right Column) -->
+        <section class="lg:col-span-8 flex flex-col gap-6">
+
+            <!-- Chart Preview -->
+            <div class="bg-fpga-card border border-fpga-border rounded-xl p-5 shadow-xl flex flex-col">
+                <div class="flex items-center justify-between mb-4">
+                    <h2 class="font-semibold text-white flex items-center gap-2 text-sm">
+                        <i class="fa-solid fa-chart-line text-brand-accent"></i> Real-time Waveform Preview
+                    </h2>
+                    <span class="text-xs font-mono text-slate-400 bg-fpga-input border border-fpga-border px-2 py-0.5 rounded">
+                        <span id="sample-count-badge">1024</span> points
+                    </span>
+                </div>
+                
+                <div class="relative w-full h-56 sm:h-64 bg-fpga-terminal rounded-lg border border-fpga-border p-2">
+                    <canvas id="waveform-chart"></canvas>
+                </div>
+            </div>
+
+            <!-- Hex File Output Area -->
+            <div class="bg-fpga-card border border-fpga-border rounded-xl p-5 shadow-xl flex-1 flex flex-col">
+                <div class="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 mb-4 border-b border-fpga-border pb-3">
+                    <div>
+                        <h2 class="font-semibold text-white text-sm flex items-center gap-2">
+                            <i class="fa-solid fa-file-code text-brand-cyan"></i> Hex Output (<code class="text-brand-400">sine.mem</code>)
+                        </h2>
+                        <p class="text-xs text-slate-400">Raw uppercase hexadecimal values without <code class="text-slate-300 font-mono">0x</code> prefixes</p>
+                    </div>
+
+                    <!-- Action Buttons -->
+                    <div class="flex flex-wrap items-center gap-2 w-full sm:w-auto">
+                        <button id="copy-btn" class="px-3.5 py-2 text-xs font-semibold rounded-lg border border-fpga-border bg-fpga-input text-slate-200 hover:bg-slate-700 hover:text-white transition flex items-center gap-1.5">
+                            <i class="fa-regular fa-copy"></i> <span id="copy-text">Copy Hex</span>
+                        </button>
+                        <button id="download-btn" class="px-4 py-2 text-xs font-semibold rounded-lg bg-brand-600 hover:bg-brand-500 text-white shadow-lg shadow-brand-600/30 transition flex items-center gap-1.5">
+                            <i class="fa-solid fa-download"></i> Download .mem
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Textarea Code Region -->
+                <div class="relative flex-1 min-h-[240px] bg-fpga-terminal rounded-lg border border-fpga-border p-3 font-mono text-xs flex flex-col">
+                    <div class="flex justify-between items-center text-[10px] text-slate-500 pb-2 border-b border-slate-800 mb-2">
+                        <span># Format: Raw Hex (One sample per line)</span>
+                        <span id="line-count-badge">1024 Lines</span>
+                    </div>
+                    <textarea id="hex-output" readonly class="w-full flex-1 bg-transparent text-emerald-400 font-mono text-xs resize-none focus:outline-none leading-relaxed" spellcheck="false"></textarea>
+                </div>
+
+                <!-- Verilog Code Snippet -->
+                <div class="mt-4 bg-fpga-input/40 border border-fpga-border rounded-lg p-3 text-xs space-y-2">
+                    <div class="flex items-center justify-between">
+                        <span class="font-semibold text-brand-400 flex items-center gap-1.5">
+                            <i class="fa-solid fa-code-branch"></i> Verilog ROM Initialization Snippet
+                        </span>
+                        <button id="copy-snippet-btn" class="text-[11px] text-slate-400 hover:text-white transition flex items-center gap-1">
+                            <i class="fa-regular fa-copy"></i> Copy Snippet
+                        </button>
+                    </div>
+                    <pre class="font-mono text-[11px] text-slate-300 overflow-x-auto bg-fpga-terminal p-2.5 rounded border border-fpga-border/60"><span class="text-purple-400">reg</span> [<span id="snippet-bits" class="text-amber-400">15</span>:0] rom_memory [0:<span id="snippet-size" class="text-amber-400">1023</span>];
+
+<span class="text-purple-400">initial</span> <span class="text-blue-400">begin</span>
+    <span class="text-brand-cyan">$readmemh</span>(<span class="text-emerald-300">"sine.mem"</span>, rom_memory);
+<span class="text-blue-400">end</span></pre>
+                </div>
+            </div>
+
+        </section>
+
+    </main>
+
+    <!-- Footer -->
+    <footer class="border-t border-fpga-border py-4 bg-fpga-card text-center text-xs text-slate-500">
+        Compatible with Xilinx Vivado, Intel Quartus, ModelSim, and SystemVerilog synthesis tools.
+    </footer>
+
+    <!-- App Logic Script -->
+    <script>
+        // State Object
+        let state = {
+            waveType: 'sine',
+            mode: 'offset', // 'offset' or 'signed'
+            size: 1024,
+            bitWidth: 16,
+            scale: 1.0,
+            phaseDeg: 0,
+            hexArray: [],
+            rawValues: []
+        };
+
+        // DOM Handles
+        const modeSelect = document.getElementById('mode-select');
+        const modeDesc = document.getElementById('mode-desc');
+        const customSizeInput = document.getElementById('custom-size-input');
+        const scaleSlider = document.getElementById('scale-slider');
+        const scaleVal = document.getElementById('scale-val');
+        const phaseSlider = document.getElementById('phase-slider');
+        const phaseVal = document.getElementById('phase-val');
+        const hexOutput = document.getElementById('hex-output');
+        const copyBtn = document.getElementById('copy-btn');
+        const copyText = document.getElementById('copy-text');
+        const downloadBtn = document.getElementById('download-btn');
+        const resetBtn = document.getElementById('reset-btn');
+        const copySnippetBtn = document.getElementById('copy-snippet-btn');
+        
+        // Stats Handles
+        const statHexDigits = document.getElementById('stat-hex-digits');
+        const statRomSize = document.getElementById('stat-rom-size');
+        const statMaxVal = document.getElementById('stat-max-val');
+        const statMinVal = document.getElementById('stat-min-val');
+        const sampleCountBadge = document.getElementById('sample-count-badge');
+        const lineCountBadge = document.getElementById('line-count-badge');
+        const snippetSize = document.getElementById('snippet-size');
+        const snippetBits = document.getElementById('snippet-bits');
+
+        let chartInstance = null;
+
+        function initChart() {
+            const ctx = document.getElementById('waveform-chart').getContext('2d');
+            chartInstance = new Chart(ctx, {
+                type: 'line',
+                data: {
+                    labels: [],
+                    datasets: [{
+                        label: 'LUT Value',
+                        data: [],
+                        borderColor: '#0ea5e9',
+                        borderWidth: 2,
+                        pointRadius: 0,
+                        pointHoverRadius: 4,
+                        fill: true,
+                        backgroundColor: 'rgba(14, 165, 233, 0.08)',
+                        tension: 0.1
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    animation: { duration: 150 },
+                    plugins: {
+                        legend: { display: false },
+                        tooltip: {
+                            callbacks: {
+                                title: (items) => `Index: ${items[0].dataIndex}`,
+                                label: (item) => `Value: ${item.raw} (0x${state.hexArray[item.dataIndex]})`
+                            }
+                        }
+                    },
+                    scales: {
+                        x: {
+                            grid: { color: '#1f2937' },
+                            ticks: { color: '#6b7280', maxTicksLimit: 8, font: { family: 'monospace', size: 10 } }
+                        },
+                        y: {
+                            grid: { color: '#1f2937' },
+                            ticks: { color: '#6b7280', font: { family: 'monospace', size: 10 } }
+                        }
+                    }
+                }
+            });
+        }
+
+        // Calculation & Generator Core
+        function generateData() {
+            const size = state.size;
+            const bits = state.bitWidth;
+            const isSigned = state.mode === 'signed';
+            const hexDigits = Math.ceil(bits / 4);
+
+            let maxVal, minVal, maxAmp;
+
+            if (isSigned) {
+                maxVal = (1 << (bits - 1)) - 1;
+                minVal = -(1 << (bits - 1));
+                maxAmp = maxVal * state.scale;
+            } else {
+                const midVal = 1 << (bits - 1);
+                maxAmp = (midVal - 1) * state.scale;
+            }
+
+            const hexLines = [];
+            const rawVals = [];
+            const labels = [];
+            const phaseRad = (state.phaseDeg * Math.PI) / 180.0;
+
+            for (let i = 0; i < size; i++) {
+                labels.push(i);
+                const t = i / size;
+                const angle = 2.0 * Math.PI * t + phaseRad;
+
+                let normVal = 0;
+
+                switch (state.waveType) {
+                    case 'sine':
+                        normVal = Math.sin(angle);
+                        break;
+                    case 'cosine':
+                        normVal = Math.cos(angle);
+                        break;
+                    case 'triangle':
+                        const normAngle = ((t + state.phaseDeg / 360.0) % 1.0);
+                        normVal = normAngle < 0.5 ? (4.0 * normAngle - 1.0) : (3.0 - 4.0 * normAngle);
+                        break;
+                    case 'sawtooth':
+                        const sawAngle = ((t + state.phaseDeg / 360.0) % 1.0);
+                        normVal = 2.0 * sawAngle - 1.0;
+                        break;
+                }
+
+                let calcInt = 0;
+                let hexVal = "";
+
+                if (isSigned) {
+                    calcInt = Math.round(normVal * maxAmp);
+                    calcInt = Math.max(minVal, Math.min(maxVal, calcInt));
+                    rawVals.push(calcInt);
+                    
+                    // Convert negative 2's complement using BigInt for 32-bit safety
+                    let bigVal = BigInt(calcInt);
+                    if (bigVal < 0n) {
+                        bigVal = (1n << BigInt(bits)) + bigVal;
+                    }
+                    hexVal = bigVal.toString(16).toUpperCase().padStart(hexDigits, '0');
+                } else {
+                    const mid = 1 << (bits - 1);
+                    calcInt = Math.round(mid + (normVal * maxAmp));
+                    const maxUnsigned = (1 << bits) - 1;
+                    calcInt = Math.max(0, Math.min(maxUnsigned, calcInt));
+                    rawVals.push(calcInt);
+
+                    hexVal = BigInt(calcInt).toString(16).toUpperCase().padStart(hexDigits, '0');
+                }
+
+                hexLines.push(hexVal);
+            }
+
+            state.hexArray = hexLines;
+            state.rawValues = rawVals;
+
+            // Update UI Output
+            hexOutput.value = hexLines.join('\n');
+            lineCountBadge.innerText = `${size} Lines`;
+            sampleCountBadge.innerText = `${size}`;
+            snippetSize.innerText = `${size - 1}`;
+            snippetBits.innerText = `${bits - 1}`;
+
+            // Update Diagnostics
+            statHexDigits.innerText = `${hexDigits} Digits`;
+            const kbSize = ((size * bits) / 8 / 1024).toFixed(2);
+            statRomSize.innerText = `${kbSize} KB`;
+
+            const maxH = Math.max(...rawVals);
+            const minH = Math.min(...rawVals);
+            statMaxVal.innerText = `0x${state.hexArray[rawVals.indexOf(maxH)]} (${maxH})`;
+            statMinVal.innerText = `0x${state.hexArray[rawVals.indexOf(minH)]} (${minH})`;
+
+            // Update Chart
+            if (chartInstance) {
+                chartInstance.data.labels = labels;
+                chartInstance.data.datasets[0].data = rawVals;
+                chartInstance.update();
+            }
+        }
+
+        // Waveform selection
+        document.querySelectorAll('.wave-btn').forEach(btn => {
+            btn.addEventListener('click', () => {
+                document.querySelectorAll('.wave-btn').forEach(b => {
+                    b.classList.remove('bg-brand-600', 'border-brand-500', 'text-white');
+                    b.classList.add('border-fpga-border', 'bg-fpga-input', 'text-slate-300');
+                });
+                btn.classList.remove('border-fpga-border', 'bg-fpga-input', 'text-slate-300');
+                btn.classList.add('bg-brand-600', 'border-brand-500', 'text-white');
+                state.waveType = btn.getAttribute('data-wave');
+                generateData();
+            });
+        });
+
+        // Size presets
+        document.querySelectorAll('.size-preset-btn').forEach(btn => {
+            btn.addEventListener('click', () => {
+                document.querySelectorAll('.size-preset-btn').forEach(b => {
+                    b.classList.remove('bg-brand-600', 'border-brand-500', 'text-white');
+                    b.classList.add('border-fpga-border', 'bg-fpga-input', 'text-slate-300');
+                });
+                btn.classList.remove('border-fpga-border', 'bg-fpga-input', 'text-slate-300');
+                btn.classList.add('bg-brand-600', 'border-brand-500', 'text-white');
+                
+                const val = parseInt(btn.getAttribute('data-size'));
+                state.size = val;
+                customSizeInput.value = val;
+                generateData();
+            });
+        });
+
+        // Custom size input
+        customSizeInput.addEventListener('input', () => {
+            let val = parseInt(customSizeInput.value) || 1024;
+            val = Math.max(4, Math.min(65536, val));
+            state.size = val;
+            
+            // Unselect preset buttons if custom value doesn't match
+            document.querySelectorAll('.size-preset-btn').forEach(b => {
+                if (parseInt(b.getAttribute('data-size')) === val) {
+                    b.classList.add('bg-brand-600', 'border-brand-500', 'text-white');
+                } else {
+                    b.classList.remove('bg-brand-600', 'border-brand-500', 'text-white');
+                    b.classList.add('border-fpga-border', 'bg-fpga-input', 'text-slate-300');
+                }
+            });
+            generateData();
+        });
+
+        // Bit width selection
+        document.querySelectorAll('.bits-btn').forEach(btn => {
+            btn.addEventListener('click', () => {
+                document.querySelectorAll('.bits-btn').forEach(b => {
+                    b.classList.remove('bg-brand-600', 'border-brand-500', 'text-white');
+                    b.classList.add('border-fpga-border', 'bg-fpga-input', 'text-slate-300');
+                });
+                btn.classList.remove('border-fpga-border', 'bg-fpga-input', 'text-slate-300');
+                btn.classList.add('bg-brand-600', 'border-brand-500', 'text-white');
+                state.bitWidth = parseInt(btn.getAttribute('data-bits'));
+                generateData();
+            });
+        });
+
+        // Mode change
+        modeSelect.addEventListener('change', () => {
+            state.mode = modeSelect.value;
+            if (state.mode === 'offset') {
+                modeDesc.innerText = "Midpoint mapped to 0x8000. Full positive scale from 0x0000 to 0xFFFF.";
+            } else {
+                modeDesc.innerText = "2's complement signed format. Negative numbers wrap hex (e.g. -1 = 0xFFFF).";
+            }
+            generateData();
+        });
+
+        // Sliders
+        scaleSlider.addEventListener('input', () => {
+            state.scale = parseInt(scaleSlider.value) / 100.0;
+            scaleVal.innerText = `${scaleSlider.value}%`;
+            generateData();
+        });
+
+        phaseSlider.addEventListener('input', () => {
+            state.phaseDeg = parseInt(phaseSlider.value);
+            phaseVal.innerText = `${phaseSlider.value}°`;
+            generateData();
+        });
+
+        // Copy Hex
+        copyBtn.addEventListener('click', () => {
+            hexOutput.select();
+            document.execCommand('copy');
+            copyText.innerText = 'Copied!';
+            copyBtn.classList.add('border-brand-500', 'text-brand-400');
+            setTimeout(() => {
+                copyText.innerText = 'Copy Hex';
+                copyBtn.classList.remove('border-brand-500', 'text-brand-400');
+            }, 2000);
+        });
+
+        // Copy Verilog Snippet
+        copySnippetBtn.addEventListener('click', () => {
+            const snippet = `reg [${state.bitWidth - 1}:0] rom_memory [0:${state.size - 1}];\n\ninitial begin\n    $readmemh("sine.mem", rom_memory);\nend`;
+            const temp = document.createElement('textarea');
+            temp.value = snippet;
+            document.body.appendChild(temp);
+            temp.select();
+            document.execCommand('copy');
+            document.body.removeChild(temp);
+            
+            const orig = copySnippetBtn.innerHTML;
+            copySnippetBtn.innerHTML = '<i class="fa-solid fa-check text-emerald-400"></i> Copied!';
+            setTimeout(() => {
+                copySnippetBtn.innerHTML = orig;
+            }, 2000);
+        });
+
+        // Download .mem File
+        downloadBtn.addEventListener('click', () => {
+            const content = state.hexArray.join('\n');
+            const blob = new Blob([content], { type: 'text/plain' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = `sine.mem`;
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            URL.revokeObjectURL(url);
+        });
+
+        // Reset
+        resetBtn.addEventListener('click', () => {
+            state = {
+                waveType: 'sine',
+                mode: 'offset',
+                size: 1024,
+                bitWidth: 16,
+                scale: 1.0,
+                phaseDeg: 0,
+                hexArray: [],
+                rawValues: []
+            };
+
+            modeSelect.value = 'offset';
+            customSizeInput.value = 1024;
+            scaleSlider.value = 100;
+            scaleVal.innerText = '100%';
+            phaseSlider.value = 0;
+            phaseVal.innerText = '0°';
+
+            document.querySelectorAll('.wave-btn').forEach(b => {
+                b.classList.remove('bg-brand-600', 'border-brand-500', 'text-white');
+                b.classList.add('border-fpga-border', 'bg-fpga-input', 'text-slate-300');
+            });
+            document.querySelector('[data-wave="sine"]').classList.add('bg-brand-600', 'border-brand-500', 'text-white');
+
+            document.querySelectorAll('.size-preset-btn').forEach(b => {
+                b.classList.remove('bg-brand-600', 'border-brand-500', 'text-white');
+                b.classList.add('border-fpga-border', 'bg-fpga-input', 'text-slate-300');
+            });
+            document.querySelector('[data-size="1024"]').classList.add('bg-brand-600', 'border-brand-500', 'text-white');
+
+            document.querySelectorAll('.bits-btn').forEach(b => {
+                b.classList.remove('bg-brand-600', 'border-brand-500', 'text-white');
+                b.classList.add('border-fpga-border', 'bg-fpga-input', 'text-slate-300');
+            });
+            document.querySelector('[data-bits="16"]').classList.add('bg-brand-600', 'border-brand-500', 'text-white');
+
+            generateData();
+        });
+
+        window.onload = () => {
+            initChart();
+            generateData();
+        };
+    </script>
+</body>
+</html>
